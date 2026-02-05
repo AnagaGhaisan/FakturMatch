@@ -242,13 +242,17 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
     wb.save(out_path)
     return out_path
 
-def delete_all_uploaded_files():
-    upload_folder = app.config['UPLOAD_FOLDER']
+# Fungsi untuk menghapus file output
+def delete_output_files(output_dir):
     try:
-        for filename in os.listdir(upload_folder):
-            file_path = os.path.join(upload_folder, filename)
-            if os.path.isfile(file_path):
-                os.remove(file_path)
+        # Cek jika direktori output ada
+        if os.path.exists(output_dir):
+            # Hapus semua file dalam folder output
+            for filename in os.listdir(output_dir):
+                file_path = os.path.join(output_dir, filename)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)  # Hapus file
+                    print(f"File deleted: {file_path}")
     except Exception as e:
         print(f"Error deleting files: {e}")
 
@@ -333,6 +337,25 @@ def show_comparison():
 @app.route('/download/<filename>')
 def download_file(filename):
     return send_file(os.path.join(BASE_DIR, 'outputs', filename), as_attachment=True)
+
+@app.route('/clear_outputs', methods=['GET'])
+def clear_outputs():
+    output_dir = os.path.join(BASE_DIR, "outputs")
+    delete_output_files(output_dir)
+    return redirect(url_for('home'))  # Kembali ke halaman utama
+
+def delete_all_uploaded_files():
+    try:
+        # Cek jika direktori upload ada
+        if os.path.exists(app.config['UPLOAD_FOLDER']):
+            # Hapus semua file dalam folder upload
+            for filename in os.listdir(app.config['UPLOAD_FOLDER']):
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)  # Hapus file
+                    print(f"Uploaded file deleted: {file_path}")
+    except Exception as e:
+        print(f"Error deleting uploaded files: {e}")
 
 if __name__ == "__main__":
     app.run(debug=True)

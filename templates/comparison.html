@@ -30,7 +30,7 @@
         <a href="{{ url_for('download_file', filename=updated_file.split('/')[-1]) }}" class="btn btn-success mt-3" download>Download Updated Draft Output</a>
 
         <!-- Back to Home Button -->
-        <a href="" class="btn btn-primary mt-3">Back to Home</a>
+        <a href="{{ url_for('clear_outputs') }}" class="btn btn-primary mt-3">Back to Home</a>
 
     </div>
 
