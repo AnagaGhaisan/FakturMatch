@@ -6,6 +6,9 @@ from openpyxl import load_workbook
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from flask import Flask, request, render_template, send_file, redirect, url_for
+from fastapi import FastAPI 
+
+app = FastAPI()
 
 # Initialize Flask app
 app = Flask(__name__)
