@@ -6,12 +6,11 @@ from openpyxl import load_workbook
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from flask import Flask, request, render_template, send_file, redirect, url_for
-from fastapi import FastAPI 
-
-app = FastAPI()
+from flask_cors import CORS
 
 # Initialize Flask app
 app = Flask(__name__)
+CORS(app)
 
 # File upload configurations
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -80,7 +79,7 @@ def _parse_id_number(x):
         return -v if neg else v
     except:
         return np.nan
-
+    
 def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output_dir: str) -> str:
     # 1) Read files
     k3 = pd.read_excel(k3_path, header=1)
@@ -144,7 +143,7 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
     keep_cols_2 = [c for c in ["NO_VOUCHER", "VOUCHER_NO", "DPP", "PPN", "CUSTOMER", "FP_STATUS"] if c in coretax_2.columns]
     coretax_combined = pd.concat([coretax_1[keep_cols_1], coretax_2[keep_cols_2]], ignore_index=True)
 
-    # kalau NO_VOUCHER muncul beberapa kali, DPP/PPN dijumlah, CUSTOMER diambil first non-null, status digabung unik
+    # 6) kalau NO_VOUCHER muncul beberapa kali, DPP/PPN dijumlah, CUSTOMER diambil first non-null, status digabung unik
     def join_unique(series):
         vals = [v for v in series.dropna().astype(str).tolist() if v.strip()]
         return "; ".join(sorted(set(vals))) if vals else None
@@ -158,24 +157,23 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
     if "VOUCHER_NO" in coretax_combined.columns:
         agg_map["VOUCHER_NO"] = "first"
 
+    # Aggregate the combined coretax data
     coretax_agg = coretax_combined.groupby("NO_VOUCHER", as_index=False).agg(agg_map)
-
-    # 6) K3 normalize kolom
-    k3.columns = [str(c).strip() for c in k3.columns]
-    if "Voucher No." in k3.columns and "Voucher No..1" in k3.columns and "Account No" not in k3.columns:
-        k3 = k3.rename(columns={"Voucher No.": "Account No", "Voucher No..1": "Voucher No."})
-
-    required_k3 = ["Account No", "Account Name", "Date", "Voucher Category", "Voucher No.", "Description",
-                   "Debit Amount", "Credit Amount", "Direction", "Balance"]
-    for col in required_k3:
-        if col not in k3.columns:
-            k3[col] = None
 
     # 7) Extract no faktur dari Description
     k3["No Faktur (key)"] = k3["Description"].apply(extract_no_faktur_from_description)
     k3["No Faktur (key)"] = k3["No Faktur (key)"].astype(str).str.strip()
 
-    # 8) Merge
+    # 8) Debugging step: Check columns in Coretax_2
+    print("Columns in Coretax_2:", coretax_2.columns)
+
+    # 9) Debugging: Check if 'NO FP MODIF' exists in coretax_2
+    if "NO FP MODIF" in coretax_2.columns:
+        print("NO FP MODIF exists in Coretax_2.")
+    else:
+        print("NO FP MODIF NOT found in Coretax_2")
+
+    # 10) Merge
     merged = pd.merge(
         k3,
         coretax_agg,
@@ -185,7 +183,7 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
         indicator=True
     )
 
-    # 9) Compute difference (tetap pakai NET seperti versi kamu)
+    # 11) Compute difference (tetap pakai NET seperti versi kamu)
     merged["Debit Amount"] = pd.to_numeric(merged["Debit Amount"], errors="coerce").fillna(0)
     merged["Credit Amount"] = pd.to_numeric(merged["Credit Amount"], errors="coerce").fillna(0)
     merged["K3_NET"] = merged["Debit Amount"] - merged["Credit Amount"]
@@ -194,14 +192,44 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
     merged["PPN"] = pd.to_numeric(merged["PPN"], errors="coerce").fillna(0)
     merged["Difference"] = merged["K3_NET"] - (merged["DPP"] + merged["PPN"])
 
-    # 10) Keterangan + Customer (langsung dari kolom kanonik)
+    # 12) Keterangan + Customer (langsung dari kolom kanonik)
     merged["Keterangan (Digunggung/Tidak Digunngung)"] = merged["FP_STATUS"]
     merged.loc[merged["_merge"] != "both", "Keterangan (Digunggung/Tidak Digunngung)"] = "Tidak ada di Coretax"
 
     merged["Customer"] = merged["CUSTOMER"]
     merged.loc[merged["_merge"] != "both", "Customer"] = None
 
-    # 11) Write ke template
+    # Debugging: Check if 'NO_FP_MODIF' exists in coretax_2
+    print("Cek apakah 'NO_FP_MODIF' ada di coretax_2:", "NO_FP_MODIF" in coretax_2.columns)
+    if "NO_FP_MODIF" in coretax_2.columns:
+        print(coretax_2["NO_FP_MODIF"].head())  # Menampilkan beberapa nilai untuk memastikan kolom ada
+    else:
+        print("Kolom 'NO_FP_MODIF' tidak ditemukan di Coretax_2")
+
+    print("Setelah merge, kolom di merged:", merged.columns)
+
+    # Jika kolom 'NO_FP_MODIF' ada di coretax_2, tambahkan ke merged
+    if "NO_FP_MODIF" in coretax_2.columns:
+        merged = pd.merge(
+            merged,
+            coretax_2[["NO_VOUCHER", "NO_FP_MODIF"]],
+            left_on="No Faktur (key)",
+            right_on="NO_VOUCHER",
+            how="left",
+            suffixes=("", "_from_coretax2")
+        )
+        print("Setelah merge NO_FP_MODIF, kolom di merged:", merged.columns)
+    else:
+        merged["NO_FP_MODIF"] = None  # Atur sebagai None jika kolom tidak ada
+
+    # 13) Before filling NaN, convert categorical columns to string type
+    for column in merged.columns:
+        if merged[column].dtype.name == 'category':  # Check if the column is categorical
+            merged[column] = merged[column].astype(str)
+    # Now, proceed with other operations
+    merged.fillna("-", inplace=True)
+
+    # 14) Write ke template
     if not os.path.exists(DRAFT_TEMPLATE_PATH):
         raise FileNotFoundError("Draft Output.xlsx tidak ditemukan. Taruh file itu 1 folder dengan app.py")
 
@@ -231,8 +259,8 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
         ws.cell(r, 10).value = row.get("Balance")
 
         # Right (Coretax)
-        ws.cell(r, 12).value = row.get("VOUCHER_NO")
-        ws.cell(r, 13).value = row.get("NO_VOUCHER")
+        ws.cell(r, 12).value = row.get("NO_VOUCHER")  # No Faktur from Coretax
+        ws.cell(r, 13).value = row.get("NO_FP_MODIF")  # Voucher No. from NO FP MODIF
         ws.cell(r, 14).value = row.get("DPP")
         ws.cell(r, 15).value = row.get("PPN")
         ws.cell(r, 16).value = row.get("Difference")
@@ -309,12 +337,11 @@ def upload_file():
     return 'Invalid file type'
 
 
-# Comparison route
 @app.route('/comparison', methods=['GET'])
 def show_comparison():
     updated_file = request.args.get('updated_file')
     page = request.args.get('page', 1, type=int)  # Default to 1 if 'page' is not in the URL
-    rows_per_page = 10
+    rows_per_page = 6
 
     # Read the updated file for comparison
     merged_df = pd.read_excel(updated_file)
@@ -331,11 +358,24 @@ def show_comparison():
     pagination_html = ""
     if page > 1:
         pagination_html += f'<a href="/comparison?updated_file={updated_file}&page={page-1}" class="btn btn-secondary">Previous</a>'
+
+    # Display numbers for pagination, limit to a range of 5 numbers
+    # Ensure that the pagination numbers are in a range that doesn't exceed the total pages
+    pagination_start = max(1, page - 2)  # Start from 2 pages before the current page
+    pagination_end = min(total_pages, pagination_start + 4)  # End at 5 pages from the starting page
+
+    for p in range(pagination_start, pagination_end + 1):
+        if p == page:
+            pagination_html += f' <span class="btn btn-light disabled">{p}</span>'
+        else:
+            pagination_html += f' <a href="/comparison?updated_file={updated_file}&page={p}" class="btn btn-secondary">{p}</a>'
+
     if page < total_pages:
         pagination_html += f' <a href="/comparison?updated_file={updated_file}&page={page+1}" class="btn btn-secondary">Next</a>'
 
     # Return the table with pagination controls, passing `page` to the template
     return render_template('comparison.html', table_html=table_html, pagination_html=pagination_html, updated_file=updated_file, page=page)
+
 
 @app.route('/download/<filename>')
 def download_file(filename):
@@ -361,4 +401,4 @@ def delete_all_uploaded_files():
         print(f"Error deleting uploaded files: {e}")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
