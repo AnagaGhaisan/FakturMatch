@@ -79,6 +79,23 @@ def _parse_id_number(x):
         return -v if neg else v
     except:
         return np.nan
+
+def calculate_difference(row):
+    # Gunakan DPP sebagai Debit dan PPN sebagai Credit
+    debit = row["DPP"]
+    credit = row["PPN"]
+    
+    # Akun yang menggunakan rumus Debit + Credit
+    if row["Account Name"] in ["Interest Bank Income", "Other Income", "Rental Income", 
+                               "Repair Service Income", "Sales", "Sales Price Protection"]:
+        return debit + credit  # DPP + PPN
+    
+    # Akun yang menggunakan rumus Debit - Credit
+    elif row["Account Name"] in ["POP Expense", "Promotion Gift", "Sales Return"]:
+        return debit - credit  # DPP - PPN
+    
+    # Jika tidak ada aturan yang ditentukan, maka return 0 (atau bisa disesuaikan)
+    return 0
     
 def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output_dir: str) -> str:
     # 1) Read files
@@ -192,18 +209,16 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
         indicator=True
     )
 
-    # 11) Compute difference (tetap pakai NET seperti versi kamu)
+    # 9) Compute difference (Digunggung / Tidak Digunggung) based on the account type
     merged["Debit Amount"] = pd.to_numeric(merged["Debit Amount"], errors="coerce").fillna(0)
     merged["Credit Amount"] = pd.to_numeric(merged["Credit Amount"], errors="coerce").fillna(0)
     merged["K3_NET"] = merged["Debit Amount"] - merged["Credit Amount"]
 
     merged["DPP"] = pd.to_numeric(merged["DPP"], errors="coerce").fillna(0)
     merged["PPN"] = pd.to_numeric(merged["PPN"], errors="coerce").fillna(0)
-    # Calculate differences for DPP
 
-    merged["Difference"] = merged["Debit Amount"] - merged["DPP"]  # Use Debit Amount and DPP for the new difference
-    # You can also calculate PPN difference if needed
-    # merged["PPN_Difference"] = merged["Credit Amount"] - merged["PPN"]
+    # Apply the correct formula for Difference based on the Account Name
+    merged["Difference"] = merged.apply(calculate_difference, axis=1)
     
 
     # 12) Keterangan + Customer (langsung dari kolom kanonik)
