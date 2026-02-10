@@ -15,9 +15,9 @@ cycler==0.12.1
 defusedxml==0.7.1
 et_xmlfile==2.0.0
 fastapi==0.128.0
-Flask==2.1.1
-flask-cors==6.0.2
-Flask-Session==0.8.0
+Flask>=2.2
+flask-session>=0.8.0
+flask-cors>=6.0.2
 fonttools==4.61.1
 fpdf2==2.8.5
 fuzzywuzzy==0.18.0
