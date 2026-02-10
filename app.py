@@ -261,7 +261,7 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
         row = merged.iloc[i]
 
         # Left (K3)
-        ws.cell(r, 1).value = row.get("Account No")
+        ws.cell(r, 1).value = row.get("Account No.")
         ws.cell(r, 2).value = row.get("Account Name")
         ws.cell(r, 3).value = row.get("Date")
         ws.cell(r, 4).value = row.get("Voucher Category")
