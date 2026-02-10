@@ -126,6 +126,15 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
 
     coretax_2["FP_STATUS"] = "FP Tidak Digunggung"
 
+    if "DEPT" in coretax_1.columns:
+        coretax_1["CUSTOMER"] = coretax_1["DEPT"]
+    elif "CUSTOMER_NAME" in coretax_1.columns:
+        coretax_1["CUSTOMER"] = coretax_1["CUSTOMER_NAME"]
+    else:
+        coretax_1["CUSTOMER"] = None
+
+    coretax_1["FP_STATUS"] = "FP Digunggung"
+
     # 4) Bersihin key + convert angka
     for df in (coretax_1, coretax_2):
         df["NO_VOUCHER"] = df["NO_VOUCHER"].astype(str).str.strip()
@@ -190,7 +199,12 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
 
     merged["DPP"] = pd.to_numeric(merged["DPP"], errors="coerce").fillna(0)
     merged["PPN"] = pd.to_numeric(merged["PPN"], errors="coerce").fillna(0)
-    merged["Difference"] = merged["K3_NET"] - (merged["DPP"] + merged["PPN"])
+    # Calculate differences for DPP
+
+    merged["Difference"] = merged["Debit Amount"] - merged["DPP"]  # Use Debit Amount and DPP for the new difference
+    # You can also calculate PPN difference if needed
+    # merged["PPN_Difference"] = merged["Credit Amount"] - merged["PPN"]
+    
 
     # 12) Keterangan + Customer (langsung dari kolom kanonik)
     merged["Keterangan (Digunggung/Tidak Digunngung)"] = merged["FP_STATUS"]
