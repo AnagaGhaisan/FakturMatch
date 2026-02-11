@@ -80,22 +80,15 @@ def _parse_id_number(x):
     except:
         return np.nan
 
-def calculate_difference(row):
-    # Gunakan DPP sebagai Debit dan PPN sebagai Credit
-    debit = row["DPP"]
-    credit = row["PPN"]
-    
-    # Akun yang menggunakan rumus Debit + Credit
+def calculate_net(row):
+    # Logika perhitungan Net berdasarkan jenis akun
     if row["Account Name"] in ["Interest Bank Income", "Other Income", "Rental Income", 
                                "Repair Service Income", "Sales", "Sales Price Protection"]:
-        return debit + credit  # DPP + PPN
-    
-    # Akun yang menggunakan rumus Debit - Credit
+        return row["Debit Amount"] + row["Credit Amount"]
     elif row["Account Name"] in ["POP Expense", "Promotion Gift", "Sales Return"]:
-        return debit - credit  # DPP - PPN
-    
-    # Jika tidak ada aturan yang ditentukan, maka return 0 (atau bisa disesuaikan)
-    return 0
+        return row["Debit Amount"] - row["Credit Amount"]
+    else:
+        return 0  # Jika akun tidak dikenali, set nilai default 0
     
 def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output_dir: str) -> str:
     # 1) Read files
@@ -209,16 +202,18 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
         indicator=True
     )
 
-    # 9) Compute difference (Digunggung / Tidak Digunggung) based on the account type
+    # 11) Compute Difference based on account type
     merged["Debit Amount"] = pd.to_numeric(merged["Debit Amount"], errors="coerce").fillna(0)
     merged["Credit Amount"] = pd.to_numeric(merged["Credit Amount"], errors="coerce").fillna(0)
-    merged["K3_NET"] = merged["Debit Amount"] - merged["Credit Amount"]
+
+    # Apply the Net calculation based on the account type
+    merged["Net"] = merged.apply(calculate_net, axis=1)
 
     merged["DPP"] = pd.to_numeric(merged["DPP"], errors="coerce").fillna(0)
     merged["PPN"] = pd.to_numeric(merged["PPN"], errors="coerce").fillna(0)
 
-    # Apply the correct formula for Difference based on the Account Name
-    merged["Difference"] = merged.apply(calculate_difference, axis=1)
+    # Calculate the Difference based on Net - DPP for "Digunggung" type
+    merged["Difference"] = merged["Net"] - merged["DPP"]
     
 
     # 12) Keterangan + Customer (langsung dari kolom kanonik)
@@ -284,17 +279,18 @@ def compare_files(k3_path: str, coretax_path_1: str, coretax_path_2: str, output
         ws.cell(r, 6).value = row.get("Description")
         ws.cell(r, 7).value = row.get("Debit Amount")
         ws.cell(r, 8).value = row.get("Credit Amount")
-        ws.cell(r, 9).value = row.get("Direction")
-        ws.cell(r, 10).value = row.get("Balance")
+        ws.cell(r, 9).value = row.get("Net")  # Displaying Net
+        ws.cell(r, 10).value = row.get("Direction")
+        ws.cell(r, 11).value = row.get("Balance")
 
         # Right (Coretax)
-        ws.cell(r, 12).value = row.get("NO_VOUCHER")  # No Faktur from Coretax
-        ws.cell(r, 13).value = row.get("NO_FP_MODIF")  # Voucher No. from NO FP MODIF
-        ws.cell(r, 14).value = row.get("DPP")
-        ws.cell(r, 15).value = row.get("PPN")
-        ws.cell(r, 16).value = row.get("Difference")
-        ws.cell(r, 17).value = row.get("Customer")
-        ws.cell(r, 18).value = row.get("Keterangan (Digunggung/Tidak Digunngung)")
+        ws.cell(r, 13).value = row.get("NO_VOUCHER")  # No Faktur from Coretax
+        ws.cell(r, 14).value = row.get("NO_FP_MODIF")  # Voucher No. from NO FP MODIF
+        ws.cell(r, 15).value = row.get("DPP")
+        ws.cell(r, 16).value = row.get("PPN")
+        ws.cell(r, 17).value = row.get("Difference")
+        ws.cell(r, 18).value = row.get("Customer")
+        ws.cell(r, 19).value = row.get("Keterangan (Digunggung/Tidak Digunngung)")
 
     os.makedirs(output_dir, exist_ok=True)
     out_name = f"Draft_Updated_Output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
