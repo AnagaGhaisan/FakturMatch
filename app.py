@@ -426,4 +426,4 @@ def delete_all_uploaded_files():
         print(f"Error deleting uploaded files: {e}")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
