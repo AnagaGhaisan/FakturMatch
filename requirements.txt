@@ -56,6 +56,7 @@ pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 python-multipart==0.0.22
 pytz==2025.2
+pkg_resources==0.0.0
 recordlinkage==0.16
 referencing==0.37.0
 reportlab==4.4.9
